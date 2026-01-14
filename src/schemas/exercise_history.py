@@ -36,6 +36,8 @@ class ExerciseHistorySchemaOut(BaseModel):
     )
 
     id: UUID = Field(default=None)
+    exercise_id: UUID = Field(default=None)
+    user_id: UUID = Field(default=None)
     success: bool = Field(default=None)
     response: str = Field(default=None)
     created_at: datetime.datetime = Field(default=None)

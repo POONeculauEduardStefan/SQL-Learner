@@ -46,17 +46,6 @@ async def user_signup(user: CreateUserSchema, db: db_dependency):
         full_name = user.email.split("@")[0]
     full_name = escape(full_name)
 
-    # html_content = f"""
-    # <html>
-    # <body>
-    #     <h1>Verify your email</h1>
-    #     <p>Hello,</p>
-    #     <p>This is a standard verification method. Click the link below:</p>
-    #     <a href="{verification_link}">Verify your email</a>
-    # </body>
-    # </html>
-    # """
-
     html_content = f"""
             <html>
               <body style="margin:0; padding:0; font-family:Arial, sans-serif; background-color:#ffffff; color:#1a1a1a;">

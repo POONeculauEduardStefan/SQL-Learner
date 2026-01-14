@@ -79,5 +79,4 @@ def get_exercises_for_user_endpoint(
         user_data=Depends(get_current_user)
 ):
     response = get_exercises(db, laboratory_id)
-    data = [ExerciseForUserSchemaOut.model_validate(lab, from_attributes=True).model_dump() for lab in response]
-    return ok(data, 200)
+    return ok(response, 200)

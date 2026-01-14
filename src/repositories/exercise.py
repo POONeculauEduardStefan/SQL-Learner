@@ -3,7 +3,8 @@ import datetime
 from sqlalchemy.orm import Session
 
 from src.models.exercise import Exercise
-from src.schemas.exercise import CreateExerciseSchema
+from src.repositories.laboratory import find_laboratory_by_id
+from src.schemas.exercise import CreateExerciseSchema, ExerciseSchemaOut
 from uuid import UUID
 
 
@@ -22,8 +23,13 @@ def add_exercise_to_db(exercise: CreateExerciseSchema, user_id: UUID, db: Sessio
 
 
 def get_exercises_db(db: Session, laboratory_id: str):
-    exercises = db.query(Exercise).filter(Exercise.laboratory_id == laboratory_id).all()
-    return exercises
+    exercises = db.query(Exercise).filter(Exercise.laboratory_id == laboratory_id).order_by(Exercise.order_index,
+                                                                                            Exercise.created_at).all()
+    laboratory = find_laboratory_by_id(laboratory_id, db)
+    data = [ExerciseSchemaOut.model_validate(exercise, from_attributes=True).model_dump() for exercise in exercises]
+    for index, exercise in enumerate(data):
+        exercise["name"] = f"{laboratory.title}.{index + 1}"
+    return data
 
 
 def delete_exercise_by_id_from_db(exercise: Exercise, db: Session):

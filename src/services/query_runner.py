@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 
 import oracledb
@@ -5,9 +6,81 @@ import oracledb
 from src.exceptions.exceptions import AppException
 from src.repositories.exercise_history import make_dict_json_serializable
 from src.schemas.query import QuerySchema, ValidateQuerySchema
+from utils.contants import ErrorCodes
 
 
-def run_query(oracle_conn: oracledb.Connection, query: QuerySchema):
+def extract_table_from_dml(query: str):
+    match = re.search(r"(?:INSERT\s+INTO|UPDATE|DELETE\s+(?:FROM)?)\s+([a-zA-Z0-9_$#]+)", query, re.IGNORECASE)
+    return match.group(1).upper() if match else None
+
+
+def get_clean_rows(raw_cols, cursor):
+    unique_cols = []
+    col_counts = {}
+
+    for col in raw_cols:
+        if col in col_counts:
+            col_counts[col] += 1
+            unique_cols.append(f"{col}_{col_counts[col]}")
+        else:
+            col_counts[col] = 0
+            unique_cols.append(col)
+
+    raw_rows = [dict(zip(unique_cols, row)) for row in cursor]
+    clean_rows = make_dict_json_serializable(raw_rows)
+    return {"columns": unique_cols, "rows": clean_rows}
+
+
+def run_query_match(db: oracledb.Connection, query: QuerySchema):
+    check_for_ddl(query.query)
+
+    matches = ['update', 'delete', 'insert', 'alter', 'drop']
+    words = re.findall("\w+", query.query)
+    if any(word.lower() in matches for word in words):
+        result = run_dml_query(db, query)
+    else:
+        result = run_select_query(db, query)
+
+    return result
+
+
+def run_dml_query(oracle_conn: oracledb.Connection, query: QuerySchema):
+    user_query = query.query
+    query_result = {"columns": [], "rows": []}
+    status_msg = ""
+
+    try:
+        with oracle_conn.cursor() as cursor:
+            cursor.execute(user_query)
+
+            affected_table = extract_table_from_dml(user_query)
+            if affected_table:
+                try:
+                    preview_query = f"SELECT * FROM {affected_table}"
+
+                    cursor.execute(preview_query)
+
+                    if cursor.description:
+                        raw_cols = [col[0] for col in cursor.description]
+                        query_result = get_clean_rows(raw_cols, cursor)
+                except oracledb.DatabaseError:
+                    status_msg += ErrorCodes.VISUALIZATION_ERROR
+
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        raise AppException(f"Error SQL: {error.message.strip()}", 400)
+
+    except Exception as e:
+        raise AppException(f"Error server: {str(e)}", 500)
+
+    finally:
+
+        oracle_conn.rollback()
+
+    return query_result
+
+
+def run_select_query(oracle_conn: oracledb.Connection, query: QuerySchema):
     user_query = query.query
     status = "error"
     error_message = None
@@ -19,21 +92,7 @@ def run_query(oracle_conn: oracledb.Connection, query: QuerySchema):
 
             if cursor.description:
                 raw_cols = [col[0] for col in cursor.description]
-
-                unique_cols = []
-                col_counts = {}
-
-                for col in raw_cols:
-                    if col in col_counts:
-                        col_counts[col] += 1
-                        unique_cols.append(f"{col}_{col_counts[col]}")
-                    else:
-                        col_counts[col] = 0
-                        unique_cols.append(col)
-
-                raw_rows = [dict(zip(unique_cols, row)) for row in cursor]
-                clean_rows = make_dict_json_serializable(raw_rows)
-                query_result = {"columns": unique_cols, "rows": clean_rows}
+                query_result = get_clean_rows(raw_cols, cursor)
                 status = "success"
             else:
                 status = "success"
@@ -51,93 +110,6 @@ def run_query(oracle_conn: oracledb.Connection, query: QuerySchema):
     return query_result
 
 
-# def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema):
-#     user_query = query.user_query
-#     teacher_query = query.correct_query
-#     error_message = None
-#     validation_result = {}
-#     try:
-#         with oracle_conn.cursor() as cursor:
-#             cursor.execute(user_query)
-#             cols_student = {col[0].lower() for col in cursor.description}
-#
-#             cursor.execute(teacher_query)
-#             cols_teacher = {col[0].lower() for col in cursor.description}
-#             if cols_student != cols_teacher:
-#                 missing_cols = list(cols_teacher - cols_student)
-#                 extra_cols = list(cols_student - cols_teacher)
-#                 error_message = "Columns doesn't match!"
-#                 validation_result = {
-#                     "status": "error",
-#                     "type": "column",
-#                     "message": error_message,
-#                     "missing_columns": missing_cols,
-#                     "extra_columns": extra_cols
-#                 }
-#                 raise oracledb.DatabaseError(error_message)
-#
-#             query_extra_rows = f"{user_query} MINUS {teacher_query}"
-#             query_missing_rows = f"{teacher_query} MINUS {user_query}"
-#
-#             with oracle_conn.cursor() as cursor:
-#                 cursor.execute(query_extra_rows)
-#                 extra_cols = [desc[0].lower() for desc in cursor.description]
-#                 extra_rows = [dict(zip(extra_cols, row)) for row in cursor]
-#
-#                 cursor.execute(query_missing_rows)
-#                 missing_cols = [desc[0].lower() for desc in cursor.description]
-#                 missing_rows = [dict(zip(missing_cols, row)) for row in cursor]
-#
-#             if not extra_rows and not missing_rows:
-#                 validation_result = {"status": "success", "message": "The query runs correctly."}
-#             else:
-#                 error_message = "The query is incorrect."
-#                 validation_result = {
-#                     "status": "error",
-#                     "type": "row",
-#                     "message": error_message,
-#                     "extra_rows_count": len(extra_rows),
-#                     "missing_rows_count": len(missing_rows),
-#                     "extra_rows_sample": extra_rows,
-#                     "missing_rows_sample": missing_rows
-#                 }
-#             with oracle_conn.cursor() as cursor:
-#                 cursor.execute(f"SELECT COUNT(*) FROM ({user_query})")
-#                 user_count = cursor.fetchone()[0]
-#
-#                 cursor.execute(f"SELECT COUNT(*) FROM ({teacher_query})")
-#                 teacher_count = cursor.fetchone()[0]
-#
-#             if user_count != teacher_count:
-#                 msg = "The query is incorrect."
-#
-#                 validation_result = {
-#                     "status": "error",
-#                     "message": f"The query is incorrect. {msg}",
-#                     "expected_row_count": teacher_count,
-#                     "actual_row_count": user_count
-#                 }
-#                 return {"validation": validation_result}
-#
-#     except oracledb.DatabaseError as e:
-#         if not error_message:
-#             err_obj, = e.args
-#             error_message = err_obj.message.strip()
-#             error_offset = err_obj.offset
-#             raise AppException(f"SQL Error: {error_message}; Offset: {error_offset}", 400)
-#
-#
-#         if not validation_result:
-#             validation_result = {"status": "error", "message": f"SQL error: {error_message}"}
-#
-#     except Exception as e:
-#         error_message = str(e)
-#         validation_result = {"status": "error", "message": f"Server error: {error_message}"}
-#
-#     return {
-#         "validation": validation_result,
-#     }
-
 def make_json_serializable(data):
     import datetime
     if isinstance(data, (datetime.date, datetime.datetime)):
@@ -145,21 +117,80 @@ def make_json_serializable(data):
     return data
 
 
+def prepare_unique_cols(raw_cols):
+    unique_cols = []
+    col_counts = {}
+
+    for col in raw_cols:
+        if col in col_counts:
+            col_counts[col] += 1
+            unique_cols.append(f"{col}_{col_counts[col]}")
+        else:
+            col_counts[col] = 0
+            unique_cols.append(col)
+    return unique_cols
+
+
+def check_for_ddl(query: str):
+    matches = ["create", "drop", "alter", "truncate"]
+    words = re.findall("\w+", query)
+    if any(word.lower() in matches for word in words):
+        raise AppException(ErrorCodes.DDL_COMMANDS, 403)
+
+
+def check_is_dml(query: str):
+    matches = ['update', 'delete', 'insert', 'alter', 'drop']
+    words = re.findall("\w+", query)
+    if any(word.lower() in matches for word in words):
+        return True
+    return False
+
+
 def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema):
     user_query = query.user_query
     teacher_query = query.correct_query
 
+    is_dml = check_is_dml(query.correct_query)
+
     try:
         with oracle_conn.cursor() as cursor:
-            cursor.execute(teacher_query)
-            teacher_cols = [col[0].lower() for col in cursor.description]
-            teacher_rows = cursor.fetchall()
+            if is_dml:
+                target_table = extract_table_from_dml(teacher_query)
+                user_target_table = extract_table_from_dml(user_query)
 
-            teacher_has_order = "order by" in teacher_query.lower()
+                if not target_table:
+                    return {"validation": {"status": "error",
+                                           "message": "Could not extract table from dml query."}}
 
-            cursor.execute(user_query)
-            user_cols = [col[0].lower() for col in cursor.description]
-            user_rows = cursor.fetchall()
+                if user_target_table != target_table:
+                    return {"validation": {"status": "error",
+                                           "message": f"You had to modify {target_table}, but you tried with {user_target_table}."}}
+
+                try:
+                    teacher_cols, teacher_rows = get_table_state_after_dml(cursor, teacher_query, target_table)
+                except Exception as e:
+                    return {"validation": {"status": "error", "message": f"Error in the teacher solution: {str(e)}"}}
+                finally:
+                    oracle_conn.rollback()
+
+                try:
+                    user_cols, user_rows = get_table_state_after_dml(cursor, user_query, target_table)
+                except oracledb.DatabaseError as e:
+                    error, = e.args
+                    return {"validation": {"status": "error", "message": f"SQL Error: {error.message.strip()}"}}
+                finally:
+                    oracle_conn.rollback()
+
+            else:
+                cursor.execute(teacher_query)
+                teacher_cols = [col[0].lower() for col in cursor.description]
+                teacher_rows = cursor.fetchall()
+
+                teacher_has_order = "order by" in teacher_query.lower()
+
+                cursor.execute(user_query)
+                user_cols = [col[0].lower() for col in cursor.description]
+                user_rows = cursor.fetchall()
 
             if user_cols != teacher_cols:
                 if set(user_cols) == set(teacher_cols):
@@ -182,10 +213,19 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                         "extra_columns": list(set(user_cols) - set(teacher_cols))
                     }
                 }
+            unique_cols = prepare_unique_cols(user_cols)
+
+            raw_rows = [dict(zip(unique_cols, row)) for row in user_rows]
+            clean_rows = make_dict_json_serializable(raw_rows)
             if user_rows == teacher_rows:
                 return {
-                    "validation": {"status": "success", "message": "Correct!", "rows_count": len(user_rows),
-                                   "columns_count": len(user_cols)}}
+                    "validation": {"status": "success",
+                                   "message": "Correct!",
+                                   "rows_count": len(user_rows),
+                                   "columns_count": len(user_cols),
+                                   "rows": clean_rows,
+                                   "columns": list(user_cols)
+                                   }}
 
             teacher_counter = Counter(teacher_rows)
             user_counter = Counter(user_rows)
@@ -205,7 +245,9 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                     return {"validation": {"status": "success",
                                            "message": "Correct!",
                                            "rows_count": len(user_rows),
-                                           "columns_count": len(user_cols)
+                                           "columns_count": len(user_cols),
+                                           "rows": clean_rows,
+                                           "columns": list(user_cols)
                                            }}
 
             missing_rows_sample = []
@@ -220,12 +262,12 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
 
             missing_total = len(missing_counter.values())
             extra_total = len(extra_counter.values())
-
             return {
                 "validation": {
                     "status": "error",
                     "type": "row",
                     "message": "Results are not correct.",
+                    "columns": user_cols,
                     "missing_rows_count": missing_total,
                     "extra_rows_count": extra_total,
                     "missing_rows_sample": missing_rows_sample,
@@ -241,3 +283,12 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
 
     except Exception as e:
         return {"validation": {"status": "error", "message": f"Server Error: {str(e)}"}}
+
+def get_table_state_after_dml(cursor, query, table_name):
+    cursor.execute(query)
+    cursor.execute(f"SELECT * FROM {table_name}")
+
+    cols = [col[0].lower() for col in cursor.description]
+    rows = cursor.fetchall()
+
+    return cols, rows

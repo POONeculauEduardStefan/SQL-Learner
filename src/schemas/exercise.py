@@ -34,7 +34,7 @@ class ExerciseSchemaOut(BaseModel):
                 "order_index": 0,
                 "user_id": "605adcfd-792b-4da2-be7e-43f805051480",
                 "created_at": "2023-10-01T12:00:00",
-                "updated_at": "2023-10-01T12:00:00"
+                "updated_at": "2023-10-01T12:00:00",
             }]
         }
     )
@@ -47,6 +47,7 @@ class ExerciseSchemaOut(BaseModel):
     user_id: UUID = Field(default=None)
     created_at: datetime.datetime = Field(default=None)
     updated_at: datetime.datetime = Field(default=None)
+    name: str = Field(default=None)
 
 
 class UpdateExerciseSchema(BaseModel):

@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 import oracledb
 from fastapi import Depends, APIRouter
@@ -11,7 +10,7 @@ from src.dependencies import get_current_user, is_admin
 from src.oracle_db import get_oracle_conn
 from src.schemas.exercise_history import CreateExerciseHistorySchema, ExerciseHistorySchemaOut
 from src.services.exercise_history import get_exercise_history, add_exercise_history, get_exercises_scoreboard, \
-    get_laboratories_scoreboard, get_exercise_history_by_user, get_exercises_stats
+    get_laboratories_scoreboard, get_exercise_history_by_user, get_exercises_stats, get_only_failed_exercises_stats
 from src.utils.responses import ok
 
 exercise_history_router = APIRouter(prefix="/api/v1/exercise_history", tags=["exercise_history"])
@@ -37,14 +36,13 @@ def get_exercises_by_user_endpoint(
         user_data=Depends(get_current_user)
 ):
     response = get_exercise_history_by_user(db, user_data["id"])
-    data = [ExerciseHistorySchemaOut.model_validate(history, from_attributes=True).model_dump() for history in response]
-    return ok(data, 200)
+    return ok(response, 200)
 
 
 @exercise_history_router.get("/by-user-id/{user_id}", status_code=status.HTTP_200_OK)
-def get_exercises_by_user_endpoint(
+def get_exercises_by_user_id_endpoint(
         db: db_dependency,
-        user_id: UUID,
+        user_id: str,
         admin: bool = Depends(is_admin)
 ):
     response = get_exercise_history_by_user(db, user_id)
@@ -104,5 +102,13 @@ def get_exercises_stats_endpoint(
         admin: bool = Depends(is_admin)
 ):
     response = get_exercises_stats(db)
+    return ok(response, 200)
+
+@exercise_history_router.get("/stats/exercises/unsolved", status_code=status.HTTP_200_OK)
+def get_only_failed_exercises_stats_endpoint(
+        db: db_dependency,
+        admin: bool = Depends(is_admin)
+):
+    response = get_only_failed_exercises_stats(db)
     return ok(response, 200)
 

@@ -6,9 +6,10 @@ from starlette import status
 from starlette.responses import Response
 
 from src.database import get_db
-from src.dependencies import is_admin, get_current_user
+from src.dependencies import is_admin, get_current_user, is_super_admin
 from src.schemas.user import UserOut, UsersPaginatedRequest, UsersPaginatedOut
-from src.services.user import get_all_users, delete_user_by_id, get_all_users_paginated, promote_user_admin
+from src.services.user import get_all_users, delete_user_by_id, get_all_users_paginated, promote_user_admin, \
+    demote_user_admin
 from src.utils.responses import ok
 
 admin_router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -30,10 +31,9 @@ def get_all_users_endpoint(
 def get_all_users_endpoint_paginated(
         db: db_dependency,
         request: UsersPaginatedRequest,
-        user_data=Depends(get_current_user),
         admin: bool = Depends(is_admin)
 ):
-    response = get_all_users_paginated(db, request, user_data["id"])
+    response = get_all_users_paginated(db, request)
     data = UsersPaginatedOut.model_validate(response).model_dump()
     return ok(data, 200)
 
@@ -42,16 +42,27 @@ def get_all_users_endpoint_paginated(
 def delete_user_endpoint(
         db: db_dependency,
         user_id: str,
+        current_user=Depends(get_current_user),
         admin: bool = Depends(is_admin)
 ):
-    response = delete_user_by_id(user_id, db)
+    response = delete_user_by_id(user_id,current_user["role"], db)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 
 @admin_router.put("/users/promote/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def promote_user_endpoint(
         db: db_dependency,
         user_id: str,
-        admin: bool = Depends(is_admin),
+        admin: bool = Depends(is_super_admin),
 ):
     response = promote_user_admin(user_id, db)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@admin_router.put("/users/demote/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def demote_user_endpoint(
+        db: db_dependency,
+        user_id: str,
+        admin: bool = Depends(is_super_admin),
+):
+    response = demote_user_admin(user_id, db)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -29,7 +29,6 @@ def get_all_users_in_db(db: Session) -> list[type[User]]:
 def get_all_users_paginated_in_db(
         db: Session,
         request: UsersPaginatedRequest,
-        user_id: str
 ) -> UsersPaginatedOut:
     page = _validate_page(request.current_page)
     per_page = _validate_per_page(request.users_per_page)
@@ -51,7 +50,7 @@ def get_all_users_paginated_in_db(
                 User.updated_at,
             )
         )
-        .filter(search_filter, User.id != user_id)
+        .filter(search_filter)
         .order_by(User.created_at.desc(), User.id.desc())
         .limit(per_page)
         .offset(skip)
@@ -60,7 +59,7 @@ def get_all_users_paginated_in_db(
     rows = query.all()
     users_data = [UserOut.model_validate(r) for r in rows]
 
-    total = db.query(User).filter(search_filter, User.id != user_id).count()
+    total = db.query(User).filter(search_filter).count()
     total_pages = math.ceil(total / per_page) if total > 0 else 0
 
     has_prev = page > 1
@@ -127,6 +126,11 @@ def update_account_db(user: User, db: Session) -> User:
 
 def promote_user_admin_db(user: User, db: Session) -> User:
     user.role = 1
+    saved_user = save_user(user, db)
+    return saved_user
+
+def demote_user_admin_db(user: User, db: Session) -> User:
+    user.role = 0
     saved_user = save_user(user, db)
     return saved_user
 
