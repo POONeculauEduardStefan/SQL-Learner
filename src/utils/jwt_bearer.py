@@ -1,9 +1,9 @@
 from fastapi import Request, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from exceptions.exceptions import AppException
+from src.exceptions.exceptions import AppException
 from src.utils.jwt_handler import decode_jwt
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 class JwtBearer(HTTPBearer):

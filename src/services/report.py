@@ -6,7 +6,7 @@ from src.repositories.laboratory import find_laboratory_by_id
 from src.repositories.report import add_report_to_db, get_reports_db, find_report_by_id, delete_report_db, \
     update_report_db, get_reports_by_user_db
 from src.schemas.report import CreateReportSchema, UpdateReportSchema
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 def add_report(db: Session, user_id: str, email: str, report: CreateReportSchema):

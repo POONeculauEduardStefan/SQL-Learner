@@ -12,7 +12,7 @@ from src.repositories.user import find_user_by_id
 from src.schemas.exercise_history import CreateExerciseHistorySchema
 from src.schemas.query import ValidateQuerySchema
 from src.services.query_runner import compare_queries
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 def get_exercise_history(db: Session, user_id: UUID, exercise_id: str):

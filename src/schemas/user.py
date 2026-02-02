@@ -14,7 +14,8 @@ class CreateUserSchema(BaseModel):
                 "first_name": "firstname",
                 "last_name": "lastname",
                 "email": "student123@yahoo.com",
-                "password": "Password1@"
+                "password": "Password1@",
+                "language": "en"
             }]
         }
     )
@@ -23,6 +24,7 @@ class CreateUserSchema(BaseModel):
     last_name: str = Field(default=None)
     email: EmailStr
     password: SecretStr
+    language: str
 
     @field_validator("password")
     @classmethod
@@ -103,6 +105,7 @@ class UsersPaginationInfoOut(BaseModel):
 
 class ForgetPasswordRequest(BaseModel):
     email: str
+    language: str
 
 
 class ResetPasswordRequest(BaseModel):

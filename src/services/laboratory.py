@@ -6,7 +6,7 @@ from src.exceptions.exceptions import AppException
 from src.repositories.laboratory import add_laboratory_to_db, get_laboratories_db, delete_laboratory_by_id_from_db, \
     find_laboratory_by_id, update_laboratory_db
 from src.schemas.laboratory import CreateLaboratorySchema
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 def add_laboratory(db: Session, user_id: UUID, laboratory: CreateLaboratorySchema):

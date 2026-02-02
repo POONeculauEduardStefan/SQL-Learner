@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import src.models.user as user_model
+from routers.ai_generator import ai_generator_router
 from src.database import engine
 from src.exceptions.handlers import register_exception_handlers
 from src.oracle_db import create_oracle_pool, close_oracle_pool
@@ -44,10 +45,13 @@ app.include_router(exercise_router)
 app.include_router(exercise_history_router)
 app.include_router(query_runner_router)
 app.include_router(report_router)
+app.include_router(ai_generator_router)
 register_exception_handlers(app)
 user_model.Base.metadata.create_all(bind=engine)
+# user_model.Base.metadata.create_all(bind=engine) --> ASTA TREBUIE COMENTATA LA CLOUD
 
 if __name__ == "__main__":
     config = uvicorn.Config("main:app", port=8000)
     server = uvicorn.Server(config)
     server.run()
+

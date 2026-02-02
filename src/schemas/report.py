@@ -27,6 +27,7 @@ class ReportSchemaOut(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [{
+                "id": "605adcfd-792b-4da2-be7e-43f805051480",
                 "user_id": "605adcfd-792b-4da2-be7e-43f805051480",
                 "added_by_email": "test@yahoo.com",
                 "exercise_id": "605adcfd-792b-4da2-be7e-43f805051489",
@@ -41,7 +42,7 @@ class ReportSchemaOut(BaseModel):
             }]
         }
     )
-
+    id: UUID = Field(default=None)
     user_id: UUID = Field(default=None)
     added_by_email: str = Field(default=None)
     exercise_id: UUID = Field(default=None)
@@ -74,8 +75,11 @@ class ReportSchemaUserOut(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [{
+                "id": "605adcfd-792b-4da2-be7e-43f805051480",
                 "user_id": "605adcfd-792b-4da2-be7e-43f805051480",
                 "exercise_id": "605adcfd-792b-4da2-be7e-43f805051489",
+                "exercise_name": "Exercise 1 from lab 2 is wrong",
+                "added_by_email": "test@yahoo.com",
                 "laboratory_id": "605adcfd-792b-4da2-be7e-43f805051481",
                 "request": "Exercise 1 from lab 2 is wrong",
                 "title": "Exercise 1 from lab 2",
@@ -86,7 +90,10 @@ class ReportSchemaUserOut(BaseModel):
             }]
         }
     )
+    id: UUID = Field(default=None)
     exercise_id: UUID = Field(default=None)
+    exercise_name: Optional[str] = Field(default=None)
+    added_by_email: str = Field(default=None)
     laboratory_id: UUID = Field(default=None)
     request: str = Field(default=None)
     title: str = Field(default=None)

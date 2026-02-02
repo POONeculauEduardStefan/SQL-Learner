@@ -3,7 +3,7 @@ from typing import Annotated
 import oracledb
 from fastapi import APIRouter, Depends
 
-from services.query_runner import run_query_match
+from src.services.query_runner import run_query_match
 from src.dependencies import get_current_user
 from src.oracle_db import get_oracle_conn
 from src.schemas.query import QuerySchema, ValidateQuerySchema

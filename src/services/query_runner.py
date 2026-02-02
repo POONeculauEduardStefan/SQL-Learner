@@ -1,3 +1,4 @@
+import json
 import re
 from collections import Counter
 
@@ -6,7 +7,7 @@ import oracledb
 from src.exceptions.exceptions import AppException
 from src.repositories.exercise_history import make_dict_json_serializable
 from src.schemas.query import QuerySchema, ValidateQuerySchema
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 def extract_table_from_dml(query: str):
@@ -33,6 +34,7 @@ def get_clean_rows(raw_cols, cursor):
 
 def run_query_match(db: oracledb.Connection, query: QuerySchema):
     check_for_ddl(query.query)
+    check_for_tcl(query.query)
 
     matches = ['update', 'delete', 'insert', 'alter', 'drop']
     words = re.findall("\w+", query.query)
@@ -133,14 +135,21 @@ def prepare_unique_cols(raw_cols):
 
 def check_for_ddl(query: str):
     matches = ["create", "drop", "alter", "truncate"]
-    words = re.findall("\w+", query)
+    words = re.findall(r"\w+", query)
     if any(word.lower() in matches for word in words):
         raise AppException(ErrorCodes.DDL_COMMANDS, 403)
 
 
+def check_for_tcl(query: str):
+    matches = ["commit", "savepoint", "rollback"]
+    words = re.findall(r"\w+", query)
+    if any(word.lower() in matches for word in words):
+        raise AppException(ErrorCodes.TCL_COMMANDS, 403)
+
+
 def check_is_dml(query: str):
     matches = ['update', 'delete', 'insert', 'alter', 'drop']
-    words = re.findall("\w+", query)
+    words = re.findall(r"\w+", query)
     if any(word.lower() in matches for word in words):
         return True
     return False
@@ -149,6 +158,12 @@ def check_is_dml(query: str):
 def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema):
     user_query = query.user_query
     teacher_query = query.correct_query
+
+    check_for_ddl(user_query)
+    check_for_ddl(teacher_query)
+
+    check_for_tcl(user_query)
+    check_for_tcl(teacher_query)
 
     is_dml = check_is_dml(query.correct_query)
 
@@ -160,16 +175,29 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
 
                 if not target_table:
                     return {"validation": {"status": "error",
-                                           "message": "Could not extract table from dml query."}}
+                                           "message": ErrorCodes.ERR_DML_NO_TABLE}}
 
                 if user_target_table != target_table:
+                    error_payload = {
+                        "key": ErrorCodes.ERR_DML_WRONG_TABLE,
+                        "params": {
+                            "expected": target_table,
+                            "actual": user_target_table
+                        }
+                    }
                     return {"validation": {"status": "error",
-                                           "message": f"You had to modify {target_table}, but you tried with {user_target_table}."}}
+                                           "message": json.dumps(error_payload)}}
 
                 try:
                     teacher_cols, teacher_rows = get_table_state_after_dml(cursor, teacher_query, target_table)
                 except Exception as e:
-                    return {"validation": {"status": "error", "message": f"Error in the teacher solution: {str(e)}"}}
+                    error_payload = {
+                        "key": ErrorCodes.ERR_TEACHER_SOL,
+                        "params": {
+                            "err": str(e)
+                        }
+                    }
+                    return {"validation": {"status": "error", "message": json.dumps(error_payload)}}
                 finally:
                     oracle_conn.rollback()
 
@@ -177,7 +205,13 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                     user_cols, user_rows = get_table_state_after_dml(cursor, user_query, target_table)
                 except oracledb.DatabaseError as e:
                     error, = e.args
-                    return {"validation": {"status": "error", "message": f"SQL Error: {error.message.strip()}"}}
+                    error_payload = {
+                        "key": ErrorCodes.SQL_ERROR,
+                        "params": {
+                            "err": error.message.strip()
+                        }
+                    }
+                    return {"validation": {"status": "error", "message": json.dumps(error_payload)}}
                 finally:
                     oracle_conn.rollback()
 
@@ -198,7 +232,7 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                         "validation": {
                             "status": "error",
                             "type": "column",
-                            "message": "Columns are matching, but the order is wrong.",
+                            "message": ErrorCodes.COLUMNS_ORDER_WRONG,
                             "missing_columns": [],
                             "extra_columns": []
                         }
@@ -208,7 +242,7 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                     "validation": {
                         "status": "error",
                         "type": "column",
-                        "message": "Columns doesn't match",
+                        "message": ErrorCodes.COLUMNS_DOES_NOT_MATCH,
                         "missing_columns": list(set(teacher_cols) - set(user_cols)),
                         "extra_columns": list(set(user_cols) - set(teacher_cols))
                     }
@@ -238,7 +272,7 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                     return {
                         "validation": {
                             "status": "error",
-                            "message": "Results are correct, but the order is wrong."
+                            "message": ErrorCodes.RESULTS_ORDER_WRONG
                         }
                     }
                 else:
@@ -266,7 +300,7 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
                 "validation": {
                     "status": "error",
                     "type": "row",
-                    "message": "Results are not correct.",
+                    "message": ErrorCodes.RESULTS_WRONG,
                     "columns": user_cols,
                     "missing_rows_count": missing_total,
                     "extra_rows_count": extra_total,
@@ -282,7 +316,14 @@ def compare_queries(oracle_conn: oracledb.Connection, query: ValidateQuerySchema
         raise AppException(f"SQL Error: {error_message}; Offset: {error_offset}", 400)
 
     except Exception as e:
-        return {"validation": {"status": "error", "message": f"Server Error: {str(e)}"}}
+        error_payload = {
+            "key": ErrorCodes.SERVER_ERROR,
+            "params": {
+                "err": str(e)
+            }
+        }
+        return {"validation": {"status": "error", "message": json.dumps(error_payload)}}
+
 
 def get_table_state_after_dml(cursor, query, table_name):
     cursor.execute(query)

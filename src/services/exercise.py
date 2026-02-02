@@ -11,7 +11,7 @@ from src.repositories.laboratory import find_laboratory_by_id
 from src.schemas.exercise import CreateExerciseSchema, UpdateExerciseSchema
 from src.schemas.query import QuerySchema
 from src.services.query_runner import run_select_query
-from utils.contants import ErrorCodes
+from src.utils.contants import ErrorCodes
 
 
 def add_exercise(db: Session, user_id: UUID, exercise: CreateExerciseSchema, oracle_conn: oracledb.Connection):

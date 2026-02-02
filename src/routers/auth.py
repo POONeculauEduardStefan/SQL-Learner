@@ -4,6 +4,7 @@ from fastapi import Depends, APIRouter, status, UploadFile, File
 from fastapi_mail import MessageSchema, MessageType, ConnectionConfig, FastMail
 from sqlalchemy.orm import Session
 
+from src.services.user import get_forgot_password_email, get_register_account_email
 from src.database import get_db
 from src.dependencies import get_current_user
 from src.schemas.user import CreateUserSchema, UserLoginSchema, UserOut, UserLoginOut, UpdateUserPassword, \
@@ -46,66 +47,10 @@ async def user_signup(user: CreateUserSchema, db: db_dependency):
         full_name = user.email.split("@")[0]
     full_name = escape(full_name)
 
-    html_content = f"""
-            <html>
-              <body style="margin:0; padding:0; font-family:Arial, sans-serif; background-color:#ffffff; color:#1a1a1a;">
-                <table role="presentation" style="width:100%; border-collapse:collapse;">
-                  <tr>
-                    <td align="center" style="padding:40px 0;">
-                      <table role="presentation" style="width:100%; max-width:600px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:8px; padding:40px; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-
-                        <!-- Logo + Title -->
-                        <tr>
-                          <td align="center" style="padding-bottom:20px;">
-                            <div style="font-size:40px; line-height:1;">📧</div>
-                            <h2 style="margin:10px 0 0; font-size:26px; color:#111;">SQL - Learner</h2>
-                          </td>
-                        </tr>
-
-                        <!-- Heading -->
-                        <tr>
-                          <td align="center" style="padding-bottom:20px;">
-                            <h1 style="font-size:24px; margin:0; color:#111;">Verify your email</h1>
-                          </td>
-                        </tr>
-
-                        <!-- Message -->
-                        <tr>
-                          <td style="font-size:16px; line-height:1.6; color:#333333; text-align:left;">
-                            <p>Hello <strong>{full_name}</strong>, </p>
-                            <p>This is a standard verification method. Click the link below:</p>
-                          </td>
-                        </tr>
-
-                        <!-- Button -->
-                        <tr>
-                          <td align="center" style="padding:30px 0;">
-                            <a href="{verification_link}" 
-                               style="background-color:#2563eb; color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:6px; display:inline-block; font-weight:bold; font-size:16px;">
-                              Verify Email
-                            </a>
-                          </td>
-                        </tr>
-
-                        <!-- Footer -->
-                        <tr>
-                          <td style="font-size:14px; line-height:1.6; color:#555; text-align:left;">
-                            <p>If you didn’t request this, please ignore this email.</p>
-                            <p>This link will expire in 10 minutes.</p>
-                            <p>For your security, do not share this email or your password with anyone.</p>
-                          </td>
-                        </tr>
-
-                      </table>
-                    </td>
-                  </tr>
-                </table>
-              </body>
-            </html>
-            """
+    html_content, subject = get_register_account_email(full_name, full_name, verification_link)
 
     message = MessageSchema(
-        subject="SQL - Learner --> Email Verification Instructions",
+        subject=subject,
         recipients=[user.email],
         body=html_content,
         subtype=MessageType.html
@@ -159,82 +104,14 @@ async def forgot_password_endpoint(request: ForgetPasswordRequest, db: db_depend
     user = get_user_by_email(request.email, db)
 
     full_name = f"{user.first_name} {user.last_name}".strip() if user else request.email.split("@")[0]
-    full_name = escape(full_name)  # prevenim injecții HTML
+    full_name = escape(full_name)
 
     forgot_link = forgot_password(request.email, db)
 
-    # html_content = f"""
-    # <html>
-    # <body>
-    #     <h1>Reset your password</h1>
-    #     <p>Hello,</p>
-    #     <p>You've requested to change your password. Click the link below:</p>
-    #     <a href="{forgot_link}">Reset Password</a>
-    #     <p>If you didn't request this please ignore this email.</p>
-    # </body>
-    # </html>
-    # """
-
-    html_content = f"""
-    <html>
-      <body style="margin:0; padding:0; font-family:Arial, sans-serif; background-color:#ffffff; color:#1a1a1a;">
-        <table role="presentation" style="width:100%; border-collapse:collapse;">
-          <tr>
-            <td align="center" style="padding:40px 0;">
-              <table role="presentation" style="width:100%; max-width:600px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:8px; padding:40px; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-
-                <!-- Logo + Title -->
-                <tr>
-                  <td align="center" style="padding-bottom:20px;">
-                    <div style="font-size:40px; line-height:1;">🗃️</div>
-                    <h2 style="margin:10px 0 0; font-size:26px; color:#111;">SQL - Learner</h2>
-                  </td>
-                </tr>
-
-                <!-- Heading -->
-                <tr>
-                  <td align="center" style="padding-bottom:20px;">
-                    <h1 style="font-size:24px; margin:0; color:#111;">Reset your password</h1>
-                  </td>
-                </tr>
-
-                <!-- Message -->
-                <tr>
-                  <td style="font-size:16px; line-height:1.6; color:#333333; text-align:left;">
-                    <p>Hello <strong>{full_name}</strong>,</p>
-                    <p>You've requested to change your password. Click the button below:</p>
-                  </td>
-                </tr>
-
-                <!-- Button -->
-                <tr>
-                  <td align="center" style="padding:30px 0;">
-                    <a href="{forgot_link}" 
-                       style="background-color:#2563eb; color:#ffffff; text-decoration:none; padding:14px 32px; border-radius:6px; display:inline-block; font-weight:bold; font-size:16px;">
-                      Reset Password
-                    </a>
-                  </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                  <td style="font-size:14px; line-height:1.6; color:#555; text-align:left;">
-                    <p>If you didn’t request this, please ignore this email.</p>
-                    <p>This link will expire in 10 minutes.</p>
-                    <p>For your security, do not share this email or your password with anyone.</p>
-                  </td>
-                </tr>
-
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
-    """
+    html_content, subject = get_forgot_password_email(request.email, full_name, forgot_link)
 
     message = MessageSchema(
-        subject="SQL - Learner --> Password Reset Instructions",
+        subject=subject,
         recipients=[request.email],
         body=html_content,
         subtype=MessageType.html

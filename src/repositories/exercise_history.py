@@ -21,7 +21,12 @@ def get_exercise_history_db(db: Session, user_id: UUID, exercise_id: str):
 
 def get_exercise_history_by_user_db(db: Session, user_id: str):
     if user_id == 'all':
-        exercise_history = db.query(ExerciseHistory).all()
+        exercise_history = (
+            db.query(ExerciseHistory)
+            .join(User, ExerciseHistory.user_id == User.id)
+            .filter(User.role == 0)
+            .all()
+        )
     else:
         exercises = get_exercises_with_names_attached_dict(db)
         exercise_history = db.query(ExerciseHistory).filter(ExerciseHistory.user_id == user_id).all()
@@ -51,7 +56,7 @@ def add_exercise_history_to_db(db: Session, user_id: UUID, validation_result: di
 
 
 def get_exercises_scoreboard_db(db: Session):
-    users = db.query(User).filter(User.role != 1).all()
+    users = db.query(User).filter(User.role == 0).all()
     users_scores = []
     for user in users:
         user_score = db.query(ExerciseHistory).distinct(ExerciseHistory.exercise_id).filter(
@@ -68,7 +73,7 @@ def get_exercises_scoreboard_db(db: Session):
 
 
 def get_laboratories_scoreboard_db(db: Session):
-    users = db.query(User).filter(User.role != 1).all()
+    users = db.query(User).filter(User.role == 0).all()
     laboratories = db.query(Laboratory).all()
     users_scores = {}
     for user in users:
@@ -108,6 +113,8 @@ def make_dict_json_serializable(data):
 
 def get_exercises_stats_db(db: Session):
     exercises = get_exercises_with_names_attached(db)
+    if exercises:
+        exercises = exercises[:10]
     exercises_stats = []
     for exercise in exercises:
         exercises_tries = db.query(ExerciseHistory).filter(ExerciseHistory.exercise_id == exercise['id']).count()

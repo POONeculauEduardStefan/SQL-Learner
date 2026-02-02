@@ -9,7 +9,7 @@ from starlette.responses import Response
 from src.database import get_db
 from src.dependencies import is_admin, get_current_user
 from src.oracle_db import get_oracle_conn
-from src.schemas.exercise import CreateExerciseSchema, ExerciseSchemaOut, UpdateExerciseSchema, ExerciseForUserSchemaOut
+from src.schemas.exercise import CreateExerciseSchema, ExerciseSchemaOut, UpdateExerciseSchema
 from src.services.exercise import add_exercise, get_exercises, delete_exercise_by_id, update_exercise, \
     get_exercises_total
 from src.utils.responses import ok
